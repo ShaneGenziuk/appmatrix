@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import {
   DIVISIONS, DEFAULT_APPS, DEFAULT_ALLOCATIONS, DEFAULT_FX, DEFAULT_SCENARIO,
   getDivisionsForApp, getDepartmentsForApp, getTotalHeadcount, getDivisionHeadcount,
@@ -16,6 +16,27 @@ import {
   NumberInput, RateSlider, SummaryCard, DivisionCard,
   fmtCurrency, fmtDelta, fmtPct,
 } from './components.jsx'
+
+// ── LocalStorage Persistence ────────────────────────────────────────────────
+
+const STORAGE_KEY = 'appmatrix_state'
+
+function loadState(key, fallback) {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (parsed[key] !== undefined) return parsed[key]
+    }
+  } catch {}
+  return fallback
+}
+
+function saveState(state) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  } catch {}
+}
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -72,15 +93,15 @@ const S = {
 // ── Main App ────────────────────────────────────────────────────────────────
 
 export default function App() {
-  // Core state
-  const [apps, setApps] = useState(DEFAULT_APPS)
-  const [allocations, setAllocations] = useState(DEFAULT_ALLOCATIONS)
-  const [divisions, setDivisions] = useState(DIVISIONS)
-  const [fx, setFx] = useState(DEFAULT_FX)
-  const [fxStamp, setFxStamp] = useState(null)
+  // Core state (persisted)
+  const [apps, setApps] = useState(() => loadState('apps', DEFAULT_APPS))
+  const [allocations, setAllocations] = useState(() => loadState('allocations', DEFAULT_ALLOCATIONS))
+  const [divisions, setDivisions] = useState(() => loadState('divisions', DIVISIONS))
+  const [fx, setFx] = useState(() => loadState('fx', DEFAULT_FX))
+  const [fxStamp, setFxStamp] = useState(() => loadState('fxStamp', null))
   const [monthly, setMonthly] = useState(false)
 
-  // UI state
+  // UI state (not persisted)
   const [scenarioMode, setScenarioMode] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [divFilter, setDivFilter] = useState('All')
@@ -89,10 +110,15 @@ export default function App() {
   const [expanded, setExpanded] = useState({})
   const [showImport, setShowImport] = useState(false)
 
-  // Scenario state
-  const [scenarios, setScenarios] = useState([{ ...DEFAULT_SCENARIO }])
+  // Scenario state (persisted)
+  const [scenarios, setScenarios] = useState(() => loadState('scenarios', [{ ...DEFAULT_SCENARIO }]))
   const [activeScenario, setActiveScenario] = useState(0)
   const [scenarioTab, setScenarioTab] = useState('rates')
+
+  // ── Persist to localStorage on change ─────────────────────────────────
+  useEffect(() => {
+    saveState({ apps, allocations, divisions, fx, fxStamp, scenarios })
+  }, [apps, allocations, divisions, fx, fxStamp, scenarios])
 
   const scenario = scenarios[activeScenario]
   const totalHC = getTotalHeadcount(divisions)
@@ -1066,6 +1092,24 @@ export default function App() {
                   {fxStamp && <span style={{ fontSize: 11, color: '#64748b' }}>Last updated: {fxStamp}</span>}
                 </div>
               </div>
+            </div>
+            <div style={{ marginTop: 20, borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
+              <button
+                style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid #fca5a5', background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
+                onClick={() => {
+                  if (window.confirm('Reset all data to defaults? This cannot be undone.')) {
+                    localStorage.removeItem(STORAGE_KEY)
+                    setApps(DEFAULT_APPS)
+                    setAllocations(DEFAULT_ALLOCATIONS)
+                    setDivisions(DIVISIONS)
+                    setFx(DEFAULT_FX)
+                    setFxStamp(null)
+                    setScenarios([{ ...DEFAULT_SCENARIO }])
+                    setActiveScenario(0)
+                  }
+                }}
+              >Reset All Data to Defaults</button>
+              <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 8 }}>Clears all saved changes and restores original 57 apps</span>
             </div>
           </div>
         )}
